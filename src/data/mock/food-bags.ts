@@ -1,0 +1,135 @@
+import type { AllergenInfo, FoodBag } from '@/types';
+
+const win = (label: string) => {
+  const [start, end] = label.split(' – ');
+  return { label, start, end };
+};
+
+const noAllergens: AllergenInfo = {
+  peanut: false,
+  seafood: false,
+  gluten: false,
+  dairy: false,
+  egg: false,
+  spicy: false,
+};
+
+/**
+ * Shape and values follow the reference `FOOD_BAGS` (`quantityLeft` is `left`,
+ * pickup window is a display label + start/end times).
+ * bag_07 and bag_08 are added so orders 011 and 022 (and the AI answer) can
+ * reference real bags; the reference had `bagId: null` / no such bag.
+ */
+export const mockFoodBags: FoodBag[] = [
+  {
+    id: 'bag_01',
+    restaurantId: 'res_01',
+    name: 'Túi cơm chiều',
+    summary: 'Cơm + 2 món mặn + canh',
+    originalPrice: 56000,
+    price: 45000,
+    left: 3,
+    pickupWindow: win('17:30 – 19:30'),
+    art: 'rice',
+    contents: [
+      'Cơm trắng hoặc cơm gạo lứt',
+      '2 món mặn thay đổi theo ngày',
+      '1 món rau xào hoặc luộc',
+      '1 phần canh',
+      'Kèm hộp giấy phân huỷ được',
+    ],
+    allergens: { ...noAllergens, peanut: true, seafood: true, gluten: 'maybe' },
+  },
+  {
+    id: 'bag_02',
+    restaurantId: 'res_01',
+    name: 'Túi chay thanh đạm',
+    summary: 'Cơm gạo lứt + 3 món chay',
+    originalPrice: 48000,
+    price: 38000,
+    left: 1,
+    pickupWindow: win('18:00 – 20:00'),
+    art: 'salad',
+    contents: ['Cơm gạo lứt', '3 món chay theo ngày', 'Canh rau củ'],
+    allergens: { ...noAllergens, peanut: true, gluten: 'maybe' },
+  },
+  {
+    id: 'bag_03',
+    restaurantId: 'res_01',
+    name: 'Túi bất ngờ cuối ngày',
+    summary: 'Món còn lại trong bếp',
+    originalPrice: 45000,
+    price: 29000,
+    left: 1,
+    pickupWindow: win('20:00 – 21:30'),
+    art: 'clay',
+    lastCall: true,
+    contents: ['Các món bếp còn lại trong ngày'],
+    allergens: { ...noAllergens, peanut: true, seafood: true, gluten: 'maybe' },
+  },
+  {
+    id: 'bag_04',
+    restaurantId: 'res_03',
+    name: 'Túi bún bò cay',
+    summary: 'Bún bò + rau sống',
+    originalPrice: 55000,
+    price: 45000,
+    left: 3,
+    pickupWindow: win('17:30 – 19:00'),
+    art: 'noodle',
+    contents: ['Bún bò', 'Rau sống', 'Nước dùng đóng riêng'],
+    allergens: { ...noAllergens, seafood: true, gluten: true, spicy: true },
+  },
+  {
+    id: 'bag_05',
+    restaurantId: 'res_05',
+    name: 'Túi salad chiều',
+    summary: 'Salad + ức gà + sốt',
+    originalPrice: 65000,
+    price: 52000,
+    left: 2,
+    pickupWindow: win('17:00 – 18:30'),
+    art: 'salad',
+    contents: ['Salad rau củ', 'Ức gà áp chảo', 'Sốt mè rang'],
+    allergens: { ...noAllergens, peanut: true, dairy: true, egg: true },
+  },
+  {
+    id: 'bag_06',
+    restaurantId: 'res_06',
+    name: 'Túi tráng miệng',
+    summary: 'Chè sen + hoa quả',
+    originalPrice: 30000,
+    price: 25000,
+    left: 3,
+    pickupWindow: win('19:00 – 21:30'),
+    art: 'dessert',
+    contents: ['Chè hạt sen', 'Hoa quả theo mùa'],
+    allergens: { ...noAllergens, dairy: true },
+  },
+  {
+    id: 'bag_07',
+    restaurantId: 'res_02',
+    name: 'Túi sushi chiều',
+    summary: 'Sushi + cuốn theo ngày',
+    originalPrice: 75000,
+    price: 60000,
+    left: 0,
+    pickupWindow: win('18:30 – 21:00'),
+    art: 'sushi',
+    contents: ['Sushi và cuốn theo ngày', 'Wasabi và nước tương'],
+    allergens: { ...noAllergens, seafood: true, gluten: 'maybe', egg: 'maybe' },
+  },
+  {
+    id: 'bag_08',
+    restaurantId: 'res_04',
+    name: 'Túi cơm niêu',
+    summary: 'Cơm niêu + món mặn + canh',
+    originalPrice: 45000,
+    price: 38000,
+    left: 4,
+    pickupWindow: win('19:00 – 21:00'),
+    art: 'clay',
+    contents: ['Cơm niêu', 'Món mặn theo ngày', 'Canh'],
+    allergens: { ...noAllergens, peanut: 'maybe', spicy: true },
+  },
+];
