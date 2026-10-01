@@ -50,6 +50,10 @@ export const Colors = {
   warningBorder: '#F2DDB4',
   warningNote: '#7A5A1E',
 
+  // web-only preview shell (`WebMobileFrame`)
+  webBackdrop: '#F2F1EE', // desktop backdrop around the phone-sized viewport
+  webPhoneBorder: '#E5E7E5', // phone viewport edge
+
   // sheets, dialogs and small surfaces (reference inline styles)
   overlay: 'rgba(18, 26, 22, 0.5)', // scrim behind sheets/dialogs
   handle: '#DDD9CC', // bottom-sheet grabber, empty stars

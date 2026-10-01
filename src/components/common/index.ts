@@ -31,3 +31,4 @@ export * from './SectionHeader';
 export * from './Skeleton';
 export * from './StateLayout';
 export * from './StatusBadge';
+export * from './WebMobileFrame';

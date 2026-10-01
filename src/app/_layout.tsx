@@ -9,6 +9,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { WebMobileFrame } from '@/components/common';
 import { Colors } from '@/constants';
 import { useAuthGate } from '@/features/auth';
 
@@ -34,7 +35,7 @@ export default function RootLayout() {
   if (!ready) return null;
 
   return (
-    <>
+    <WebMobileFrame>
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.paper } }}>
         <Stack.Screen name="index" />
@@ -48,6 +49,6 @@ export default function RootLayout() {
         <Stack.Screen name="ai" />
       </Stack>
       {DevMenu ? <DevMenu /> : null}
-    </>
+    </WebMobileFrame>
   );
 }

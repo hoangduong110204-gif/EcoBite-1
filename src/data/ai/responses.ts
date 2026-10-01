@@ -1,13 +1,13 @@
 import type { AiConversationSummary, AiMockResponse } from '@/types/ai';
 
 /** Follows the reference `AI_MOCK`. AI references core entities by id only. */
-export const AI_GREETING = 'Chào Dương! Bạn muốn ăn gì hôm nay?';
+export const AI_GREETING =
+  'Chào Dương 👋\nHôm nay bạn đang thèm món gì?\n\nMình có thể tìm giúp bạn món ngon, giá hợp lý và gần chỗ bạn nè.';
 
 export const aiQuickPrompts: string[] = [
-  'Hôm nay ăn gì?',
-  'Món cay, giá rẻ?',
-  'Ăn healthy?',
-  'Gợi ý cho tôi',
+  '🌶️ Đang thèm món cay',
+  '💰 Tìm món dưới 50k',
+  '🥗 Hôm nay ăn healthy',
 ];
 
 export const AI_DISCLAIMER =
@@ -15,66 +15,73 @@ export const AI_DISCLAIMER =
 
 export const AI_FALLBACK_RESPONSE: AiMockResponse = {
   keywords: [],
-  text: 'Mình là trợ lý EcoBite (bản thử nghiệm). Bạn có thể hỏi mình về túi thực phẩm, quán gần bạn hoặc cách nhận hàng.',
+  text: 'Mình chưa chắc hiểu ý bạn lắm 😅 Bạn thử nói cụ thể hơn xem — món gì, tầm giá nào, hay khu vực nào — mình tìm giúp liền nhé.',
 };
 
 export const aiMockResponses: AiMockResponse[] = [
   {
-    keywords: ['cay', 'rẻ'],
-    text: 'Dưới đây là một số món phù hợp với bạn:',
+    keywords: ['cay', 'rẻ', '50k'],
+    text: 'Được luôn 😄 Nếu bạn muốn dưới 50k thì mình ưu tiên túi này trước nhé. Vị cay khá đậm, 45k thôi mà quán đang được đánh giá khá tốt.',
     suggestions: [
       {
         id: 'sg_bag_04',
         label: 'Túi bún bò cay',
         target: { type: 'food-bag', id: 'bag_04' },
-        reasons: [
-          'Có vị cay đậm, đúng khẩu vị bạn vừa nói',
-          '45.000đ — nằm trong ngân sách dưới 50k',
-          'Quán gần bạn nhất (0.8 km) và còn 3 túi',
-          'Khung giờ nhận 17:30 – 19:00, bạn còn kịp',
-        ],
+        reasons: ['Hợp với vị cay bạn đang tìm', 'Giá vừa đúng ngân sách', 'Món nước dễ ăn, khá phổ biến', 'Quán đang được đánh giá tốt'],
       },
       {
         id: 'sg_bag_08',
         label: 'Túi cơm niêu cay',
         target: { type: 'food-bag', id: 'bag_08' },
-        reasons: ['38.000đ — rẻ hơn', 'Cơm niêu có vị cay nhẹ'],
+        reasons: ['Rẻ hơn một chút, 38k thôi', 'Vị cay nhẹ, ăn no bụng hơn'],
       },
     ],
   },
   {
     keywords: ['healthy', 'chay', 'salad'],
-    text: 'Đây là lựa chọn healthy đang còn túi:',
+    text: 'Ăn healthy hôm nay đúng bài đấy 🥗 Mình nghĩ túi salad này hợp với bạn nè.',
     suggestions: [
       {
         id: 'sg_bag_05',
         label: 'Túi salad chiều',
         target: { type: 'food-bag', id: 'bag_05' },
-        reasons: ['Salad tươi kèm ức gà', 'Quán có điểm đánh giá cao nhất (4.9)'],
+        reasons: ['Salad tươi, kèm ức gà nhẹ bụng', 'Quán đang được đánh giá cao nhất'],
+      },
+    ],
+  },
+  {
+    keywords: ['ngọt', 'tráng miệng', 'dessert'],
+    text: 'Đang thèm ngọt đúng không 😄 Mình có túi tráng miệng nhẹ nhàng, dễ ăn cho bạn nè.',
+    suggestions: [
+      {
+        id: 'sg_bag_06',
+        label: 'Túi tráng miệng',
+        target: { type: 'food-bag', id: 'bag_06' },
+        reasons: ['Ngọt thanh, hợp lúc thèm đồ tráng miệng', 'Giá chỉ 25.000đ, khá nhẹ nhàng'],
       },
     ],
   },
   {
     keywords: ['gần', 'quán'],
-    text: 'Đây là vài quán gần bạn đang có túi thực phẩm:',
+    text: 'Gần bạn thì mình thấy hai quán này đang có túi ngon nè 👇',
     suggestions: [
       {
         id: 'sg_res_03',
         label: 'Bún Bò Cay',
         target: { type: 'restaurant', id: 'res_03' },
-        reasons: ['Cách bạn 0.8 km'],
+        reasons: ['Chỉ cách bạn 0.8 km thôi'],
       },
       {
         id: 'sg_res_06',
         label: 'Chè Sen Bà Tâm',
         target: { type: 'restaurant', id: 'res_06' },
-        reasons: ['Cách bạn 0.9 km'],
+        reasons: ['Cách bạn 0.9 km, tiện ghé'],
       },
     ],
   },
   {
     keywords: ['nhận', 'qr', 'pickup'],
-    text: 'Sau khi thanh toán, bạn nhận mã QR nhận hàng. Đến quán và đưa mã này cho nhân viên để xác nhận.',
+    text: 'Sau khi thanh toán, bạn sẽ có mã QR nhận hàng riêng. Cứ đưa mã đó cho nhân viên ở quán là nhận được túi liền nhé 👌',
   },
 ];
 

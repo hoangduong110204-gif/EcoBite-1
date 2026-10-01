@@ -1,42 +1,36 @@
-import { Pressable, View } from 'react-native';
+import { View, type ImageSourcePropType } from 'react-native';
 
-import { AppText, Icon } from '@/components/common';
-import { Colors, Spacing } from '@/constants';
-import type { AiSuggestion } from '@/types/ai';
+import { Spacing } from '@/constants';
+
+import { AiRecommendationCard } from './AiRecommendationCard';
+
+export interface AiRecommendationItem {
+  key: string;
+  label: string;
+  image?: ImageSourcePropType;
+  price?: string;
+  rating?: string;
+  reasons?: string[];
+  onPress: () => void;
+}
 
 interface SuggestionListProps {
-  suggestions: AiSuggestion[];
-  /** Opens the suggested entity; navigation stays in the caller. */
-  onOpen: (suggestion: AiSuggestion) => void;
+  /** Already-resolved recommendation data. Presentation lookup stays in the screen —
+   * `components/ai` never imports `@/data`, so it stays purely presentational. */
+  items: AiRecommendationItem[];
 }
 
 /**
- * Suggestions inside an assistant bubble: one plain row per suggestion (title +
- * chevron) with its reasons as short lines underneath. No card per suggestion.
+ * Recommendations inside an assistant turn: at most 3 compact `AiRecommendationCard`s,
+ * stacked vertically so they keep scrolling with the rest of the conversation.
  */
-export function SuggestionList({ suggestions, onOpen }: SuggestionListProps) {
+export function SuggestionList({ items }: SuggestionListProps) {
+  if (items.length === 0) return null;
+
   return (
-    <View style={{ gap: Spacing.s10, marginTop: Spacing.xs }}>
-      {suggestions.map((suggestion) => (
-        <Pressable
-          key={suggestion.id}
-          accessibilityRole="button"
-          accessibilityLabel={`Xem ${suggestion.label}`}
-          disabled={!suggestion.target}
-          onPress={() => onOpen(suggestion)}
-          style={{ gap: 3 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs }}>
-            <AppText variant="bodyStrong" color="primaryDark" style={{ flexShrink: 1 }}>
-              {suggestion.label}
-            </AppText>
-            {suggestion.target ? <Icon name="chevronRight" size={13} color={Colors.primaryDark} /> : null}
-          </View>
-          {suggestion.reasons?.map((reason) => (
-            <AppText key={reason} variant="caption" color="textMuted" style={{ lineHeight: 16 }}>
-              {`• ${reason}`}
-            </AppText>
-          ))}
-        </Pressable>
+    <View style={{ gap: Spacing.sm }}>
+      {items.map((item) => (
+        <AiRecommendationCard key={item.key} label={item.label} image={item.image} price={item.price} rating={item.rating} reasons={item.reasons} onPress={item.onPress} />
       ))}
     </View>
   );

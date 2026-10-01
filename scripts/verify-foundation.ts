@@ -24,7 +24,7 @@ import { TAB_ITEMS } from '../src/constants/tabs';
 import { FontFamily, FontSize, Typography } from '../src/constants/typography';
 import { calcDiscountPercent, formatCountdown, formatDistance, formatMoney, formatPhone, formatTimeVN } from '../src/utils/format';
 import { getTimelineSteps } from '../src/utils/order-timeline';
-import { aiConversationHistory, aiMockResponses, aiQuickPrompts } from '../src/data/ai';
+import { AI_FALLBACK_RESPONSE, aiConversationHistory, aiMockResponses, aiQuickPrompts } from '../src/data/ai';
 import { mockAreas, mockOrders, mockPaymentMethods, mockRestaurants } from '../src/data/mock';
 import { getHomeCategories, getHomeView, getPopularBags, swapHomeRestaurants } from '../src/features/discovery/home-logic';
 import { favoriteKey, getFavorites, resetFavoritesStore, toggleFavorite } from '../src/features/discovery/favorites-store';
@@ -67,6 +67,11 @@ import { devAdvanceOrder, devExpireOrder, devCancelOrder, devSetPaymentScenario 
 import { canRetryPayment, derivePaymentPhase, holdSecondsLeft } from '../src/features/payment/payment-phase';
 import { settlePayment } from '../src/features/payment/settle-payment';
 import { aiService } from '../src/services/ai';
+import { detectIntents } from '../src/services/ai/intent-detector';
+import { understandAiQuery } from '../src/services/ai/query-understanding';
+import { generateReply } from '../src/services/ai/response-generator';
+import { AI_SUGGESTION_CATALOG } from '../src/data/ai/ai-suggestion-catalog';
+import { detectFoodQuestion } from '../src/services/ai/food-question-detector';
 import { api } from '../src/services/api';
 import { paymentService, setMockPaymentScenario } from '../src/services/payment';
 import type { Cart, Order, OrderState, OrderStatus, PaymentQr, PickupQr, PickupSlot } from '../src/types';
@@ -709,6 +714,243 @@ async function main() {
       const bad = read(f).split('\n').filter((l) => forbidden.test(l));
       assert.deepEqual(bad, [], `${path.relative(ROOT, f)}: ${bad.join(' | ')}`);
     }
+  });
+
+  // ---------- AI Part 1: intent detection ----------
+  console.log('\n[7b] AI intent detection (Part 1)');
+  await test('SWEET: "món ngọt", "đồ ngọt", "đang thèm ngọt"', () => {
+    for (const text of ['món ngọt', 'đồ ngọt', 'đang thèm ngọt']) assert.ok(detectIntents(text).includes('SWEET'), text);
+  });
+  await test('SPICY: "món cay", "đồ cay"', () => {
+    for (const text of ['món cay', 'đồ cay']) assert.ok(detectIntents(text).includes('SPICY'), text);
+  });
+  await test('HEALTHY: "healthy", "ăn lành mạnh", "nhẹ bụng"', () => {
+    for (const text of ['healthy', 'ăn lành mạnh', 'nhẹ bụng']) assert.ok(detectIntents(text).includes('HEALTHY'), text);
+  });
+  await test('CHEAP: "món rẻ", "ăn tiết kiệm"; a bare "giá" is NOT cheap', () => {
+    for (const text of ['món rẻ', 'ăn tiết kiệm']) assert.ok(detectIntents(text).includes('CHEAP'), text);
+    assert.ok(!detectIntents('món này giá bao nhiêu?').includes('CHEAP'));
+  });
+  await test('meal types: "ăn sáng" → BREAKFAST, "ăn trưa" → LUNCH, "ăn tối" → DINNER', () => {
+    assert.ok(detectIntents('ăn sáng').includes('BREAKFAST'));
+    assert.ok(detectIntents('ăn trưa').includes('LUNCH'));
+    assert.ok(detectIntents('ăn tối').includes('DINNER'));
+  });
+  await test('food categories: "đồ uống" → DRINK, "mì" → NOODLES, "cơm" → RICE, "salad" → SALAD, "ăn chay" → VEGETARIAN', () => {
+    assert.ok(detectIntents('đồ uống').includes('DRINK'));
+    assert.ok(detectIntents('mì').includes('NOODLES'));
+    assert.ok(detectIntents('cơm').includes('RICE'));
+    assert.ok(detectIntents('salad').includes('SALAD'));
+    assert.ok(detectIntents('ăn chay').includes('VEGETARIAN'));
+  });
+  await test('NEARBY: "gần đây" is nearby, "gần mấy giờ?" is NOT (asking the time, not proximity)', () => {
+    assert.ok(detectIntents('gần đây').includes('NEARBY'));
+    assert.ok(detectIntents('quán gần mình').includes('NEARBY'));
+    assert.ok(!detectIntents('gần mấy giờ?').includes('NEARBY'));
+  });
+  await test('multiple intents: "món ngọt dưới 50k" → SWEET + CHEAP; "món cay mà rẻ" → SPICY + CHEAP', () => {
+    const sweetCheap = detectIntents('món ngọt dưới 50k');
+    assert.ok(sweetCheap.includes('SWEET') && sweetCheap.includes('CHEAP'), sweetCheap.join(','));
+    const spicyCheap = detectIntents('món cay mà rẻ');
+    assert.ok(spicyCheap.includes('SPICY') && spicyCheap.includes('CHEAP'), spicyCheap.join(','));
+  });
+  await test('unrecognized input falls back to UNKNOWN, not a false-positive intent', () => {
+    assert.deepEqual(detectIntents('zzzz random unrelated text'), ['UNKNOWN']);
+    assert.deepEqual(detectIntents(''), ['UNKNOWN']);
+  });
+  await test('normalization: case, punctuation and extra spaces do not change the result', () => {
+    assert.deepEqual(detectIntents('   Có Gì   NGỌT   không???  '), detectIntents('có gì ngọt không'));
+  });
+  await test('mock AI still replies unchanged for every existing keyword and the "zzzz" fallback (intent wiring is additive only)', async () => {
+    for (const e of aiMockResponses) assert.equal((await aiService.sendMessage({ text: e.keywords[0], history: [] })).text, e.text);
+    const r = await aiService.sendMessage({ text: 'zzzz', history: [] });
+    assert.equal(r.text, AI_FALLBACK_RESPONSE.text);
+  });
+
+  // ---------- AI Part 2: combine intents + constraints ----------
+  console.log('\n[7c] AI query understanding (Part 2)');
+  await test('A. single intent: "món ngọt" → SWEET, no constraints', () => {
+    const u = understandAiQuery('món ngọt');
+    assert.ok(u.intents.includes('SWEET'), u.intents.join(','));
+    assert.deepEqual(u.constraints, {});
+  });
+  await test('B. multiple intents + price: "món ngọt dưới 50k" → SWEET + CHEAP, maxPrice 50000', () => {
+    const u = understandAiQuery('món ngọt dưới 50k');
+    assert.ok(u.intents.includes('SWEET') && u.intents.includes('CHEAP'), u.intents.join(','));
+    assert.deepEqual(u.constraints, { maxPrice: 50000 });
+  });
+  await test('C. spicy + cheap, no number: "món cay mà rẻ" → SPICY + CHEAP, empty constraints', () => {
+    const u = understandAiQuery('món cay mà rẻ');
+    assert.ok(u.intents.includes('SPICY') && u.intents.includes('CHEAP'), u.intents.join(','));
+    assert.deepEqual(u.constraints, {});
+  });
+  await test('D. healthy + budget: "healthy dưới 60k" → HEALTHY + CHEAP, maxPrice 60000', () => {
+    const u = understandAiQuery('healthy dưới 60k');
+    assert.ok(u.intents.includes('HEALTHY') && u.intents.includes('CHEAP'), u.intents.join(','));
+    assert.deepEqual(u.constraints, { maxPrice: 60000 });
+  });
+  await test('E. sweet + nearby: "món ngọt gần đây" → SWEET + NEARBY, nearby true', () => {
+    const u = understandAiQuery('món ngọt gần đây');
+    assert.ok(u.intents.includes('SWEET') && u.intents.includes('NEARBY'), u.intents.join(','));
+    assert.deepEqual(u.constraints, { nearby: true });
+  });
+  await test('F. sweet + budget + nearby: "món ngọt dưới 50k gần đây" → all three, both constraints', () => {
+    const u = understandAiQuery('món ngọt dưới 50k gần đây');
+    assert.ok(u.intents.includes('SWEET') && u.intents.includes('CHEAP') && u.intents.includes('NEARBY'), u.intents.join(','));
+    assert.deepEqual(u.constraints, { maxPrice: 50000, nearby: true });
+  });
+  await test('G. budget only: "có gì dưới 40k" → CHEAP, maxPrice 40000', () => {
+    const u = understandAiQuery('có gì dưới 40k');
+    assert.ok(u.intents.includes('CHEAP'), u.intents.join(','));
+    assert.deepEqual(u.constraints, { maxPrice: 40000 });
+  });
+  await test('H. price formats: 50k / 50.000 / 50,000 / 50 nghìn / 50 ngàn all parse to 50000', () => {
+    for (const text of ['50k', '50.000', '50,000', '50 nghìn', '50 ngàn']) {
+      assert.equal(understandAiQuery(text).constraints.maxPrice, 50000, text);
+    }
+  });
+  await test('I. no false positive: "giá bao nhiêu?" has no price (no number present)', () => {
+    assert.equal(understandAiQuery('giá bao nhiêu?').constraints.maxPrice, undefined);
+    assert.equal(understandAiQuery('bao nhiêu tiền?').constraints.maxPrice, undefined);
+    assert.equal(understandAiQuery('giá món này?').constraints.maxPrice, undefined);
+  });
+  await test('J. no random-number false positive: "ăn món 2 người" is not maxPrice 20000; cash-on-hand is not a budget', () => {
+    assert.equal(understandAiQuery('ăn món 2 người').constraints.maxPrice, undefined);
+    assert.equal(understandAiQuery('mình có 100k tiền mặt').constraints.maxPrice, undefined);
+  });
+  await test('K. unknown: "hello" → UNKNOWN, empty constraints; empty input never throws', () => {
+    assert.deepEqual(understandAiQuery('hello'), { intents: ['UNKNOWN'], constraints: {} });
+    assert.deepEqual(understandAiQuery(''), { intents: ['UNKNOWN'], constraints: {} });
+    assert.deepEqual(understandAiQuery('???'), { intents: ['UNKNOWN'], constraints: {} });
+  });
+  await test('L. Part 1 detectIntents is untouched by Part 2 (same results as the earlier assertions)', () => {
+    assert.ok(detectIntents('món ngọt').includes('SWEET'));
+    assert.ok(detectIntents('món cay').includes('SPICY'));
+    assert.deepEqual(detectIntents('zzzz random unrelated text'), ['UNKNOWN']);
+  });
+
+  // ---------- AI Part 3: natural response + recommendation selection ----------
+  console.log('\n[7d] AI natural response + recommendation selection (Part 3)');
+  await test('1. "món ngọt" → natural SWEET response + the real dessert bag (bag_06)', () => {
+    const r = generateReply('món ngọt')!;
+    assert.ok(r.text.length > 0);
+    assert.doesNotMatch(r.text, /Mình chưa chắc hiểu ý bạn/, 'must not read as the generic fallback');
+    assert.equal(r.suggestions?.[0]?.target?.id, 'bag_06');
+  });
+  await test('2. "tìm món ngọt" → SWEET, same dessert suggestion', () => {
+    assert.equal(generateReply('tìm món ngọt')!.suggestions?.[0]?.target?.id, 'bag_06');
+  });
+  await test('3. "nay muốn ăn ngọt" → SWEET, same dessert suggestion', () => {
+    assert.equal(generateReply('nay muốn ăn ngọt')!.suggestions?.[0]?.target?.id, 'bag_06');
+  });
+  await test('4. "món cay" → SPICY, spicy bag first', () => {
+    assert.equal(generateReply('món cay')!.suggestions?.[0]?.target?.id, 'bag_04');
+  });
+  await test('5. "healthy" → HEALTHY, the salad bag', () => {
+    assert.equal(generateReply('healthy')!.suggestions?.[0]?.target?.id, 'bag_05');
+  });
+  await test('6. "có gì rẻ không" → CHEAP, a genuinely cheap bag', () => {
+    const r = generateReply('có gì rẻ không')!;
+    assert.ok(r.suggestions && r.suggestions.length > 0);
+    for (const s of r.suggestions!) {
+      const entry = AI_SUGGESTION_CATALOG.find((e) => e.suggestion.id === s.id);
+      assert.ok(entry?.intents.includes('CHEAP'), s.id);
+    }
+  });
+  await test('7. "muốn ăn sáng" → BREAKFAST detected, a reply is generated (no matching bag in the mock yet, and that is fine)', () => {
+    const u = understandAiQuery('muốn ăn sáng');
+    assert.ok(u.intents.includes('BREAKFAST'));
+    const r = generateReply('muốn ăn sáng')!;
+    assert.ok(r.text.length > 0);
+  });
+  await test('8. "có gì gần đây" → NEARBY, the two nearby restaurants', () => {
+    const r = generateReply('có gì gần đây')!;
+    assert.deepEqual(r.suggestions?.map((s) => s.target?.id).sort(), ['res_03', 'res_06']);
+  });
+  await test('9. "món ngọt dưới 50k" → SWEET + CHEAP, budget-aware: only the verified-cheap dessert bag', () => {
+    const r = generateReply('món ngọt dưới 50k')!;
+    assert.deepEqual(r.suggestions?.map((s) => s.target?.id), ['bag_06']);
+  });
+  await test('10. "món cay mà rẻ" → SPICY + CHEAP, both spicy-and-cheap bags', () => {
+    const r = generateReply('món cay mà rẻ')!;
+    assert.deepEqual(r.suggestions?.map((s) => s.target?.id), ['bag_04', 'bag_08']);
+  });
+  await test('11. "healthy dưới 60k" → HEALTHY + CHEAP, the salad bag (52k is genuinely under 60k)', () => {
+    const r = generateReply('healthy dưới 60k')!;
+    assert.deepEqual(r.suggestions?.map((s) => s.target?.id), ['bag_05']);
+  });
+  await test('12. "món ngọt gần đây" → SWEET + NEARBY, the nearby dessert restaurant ranks first', () => {
+    const r = generateReply('món ngọt gần đây')!;
+    assert.equal(r.suggestions?.[0]?.target?.id, 'res_06');
+  });
+  await test('13. "món ngọt dưới 50k gần đây" → SWEET + CHEAP + NEARBY, only the price-verified pick (the restaurant has no known price)', () => {
+    const r = generateReply('món ngọt dưới 50k gần đây')!;
+    assert.deepEqual(r.suggestions?.map((s) => s.target?.id), ['bag_06']);
+  });
+  await test('14. unknown input: generateReply returns undefined, and the mock AI fallback is unchanged', async () => {
+    assert.equal(generateReply('hello'), undefined);
+    assert.equal(generateReply('zzzz'), undefined);
+    const r = await aiService.sendMessage({ text: 'zzzz', history: [] });
+    assert.equal(r.text, AI_FALLBACK_RESPONSE.text);
+    assert.equal(r.suggestions, undefined);
+  });
+  await test('price truthfulness: nothing in the mock is under 20k, so the AI never claims a price it cannot verify', () => {
+    const r = generateReply('có gì dưới 20k')!;
+    assert.match(r.text, /chưa thấy lựa chọn nào.*xác nhận chắc chắn/, r.text);
+    assert.doesNotMatch(r.text, /là món dưới 20k/);
+  });
+  await test('mock AI still replies unchanged for every existing keyword (response generation is additive only)', async () => {
+    for (const e of aiMockResponses) assert.equal((await aiService.sendMessage({ text: e.keywords[0], history: [] })).text, e.text);
+  });
+
+  // ---------- AI Part 4: food-related questions ----------
+  console.log('\n[7e] AI food-question detection (Part 4)');
+  await test('1–2. spicy health question → SPICY_HEALTH', () => {
+    assert.equal(detectFoodQuestion('ăn cay nhiều có tốt không?'), 'SPICY_HEALTH');
+    assert.equal(detectFoodQuestion('ăn cay có hại không?'), 'SPICY_HEALTH');
+  });
+  await test('3. sweet health question → SWEET_HEALTH', () => {
+    assert.equal(detectFoodQuestion('ăn đồ ngọt nhiều có sao không?'), 'SWEET_HEALTH');
+  });
+  await test('4. healthy-food question → HEALTHY_FOOD', () => {
+    assert.equal(detectFoodQuestion('ăn healthy có tốt không?'), 'HEALTHY_FOOD');
+  });
+  await test('5. meal advice ("nên ăn gì" + a meal time) → MEAL_ADVICE, not a plain DINNER command', () => {
+    assert.equal(detectFoodQuestion('buổi tối nên ăn gì?'), 'MEAL_ADVICE');
+  });
+  await test('6. late-night eating → LATE_NIGHT_EATING', () => {
+    assert.equal(detectFoodQuestion('ăn tối muộn có tốt không?'), 'LATE_NIGHT_EATING');
+  });
+  await test('7. fullness/satiety → FULLNESS_ADVICE', () => {
+    assert.equal(detectFoodQuestion('ăn gì để no lâu?'), 'FULLNESS_ADVICE');
+  });
+  await test('8–9. light-food question (framed with "nào"/"gì") → LIGHT_FOOD', () => {
+    assert.equal(detectFoodQuestion('món nào nhẹ bụng?'), 'LIGHT_FOOD');
+    assert.equal(detectFoodQuestion('món nào ít dầu mỡ?'), 'LIGHT_FOOD');
+  });
+  await test('10–14. bare recommendation requests are NOT food questions (NONE), so they still reach Part 1–3', () => {
+    for (const text of ['món ngọt', 'món cay', 'healthy', 'có gì rẻ không', 'có gì gần đây']) {
+      assert.equal(detectFoodQuestion(text), 'NONE', text);
+    }
+  });
+  await test('15. unknown input: mock AI fallback behavior is unchanged', async () => {
+    assert.equal(detectFoodQuestion('zzzz'), 'NONE');
+    const r = await aiService.sendMessage({ text: 'zzzz', history: [] });
+    assert.equal(r.text, AI_FALLBACK_RESPONSE.text);
+    assert.equal(r.suggestions, undefined);
+  });
+  await test('question path never claims a medical fact, and offers a truthful, existing recommendation', async () => {
+    const spicy = await aiService.sendMessage({ text: 'ăn cay nhiều có hại không?', history: [] });
+    assert.doesNotMatch(spicy.text, /chữa|bệnh|chẩn đoán/i, 'no diagnosis / disease wording');
+    assert.ok(spicy.suggestions && spicy.suggestions.some((s) => s.target?.id === 'bag_04'), 'offers the real spicy bag, not a fabricated one');
+
+    const sweet = await aiService.sendMessage({ text: 'ăn đồ ngọt nhiều có sao không?', history: [] });
+    assert.ok(sweet.suggestions && sweet.suggestions.some((s) => s.target?.id === 'bag_06'));
+  });
+  await test('bare recommendation phrasing still goes through Part 1–3 unchanged, not the question path', async () => {
+    const r = await aiService.sendMessage({ text: 'món ngọt', history: [] });
+    assert.equal(r.suggestions?.[0]?.target?.id, 'bag_06');
+    assert.doesNotMatch(r.text, /vừa phải thường không có vấn đề|năng lượng nạp vào/, 'must not read as the SWEET_HEALTH question answer');
   });
 
   // ---------- U1.1 shared UI ----------
